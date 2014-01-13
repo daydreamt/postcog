@@ -78,7 +78,11 @@
   Please make sure at least one of the layer has type input,
   and at least one has type output, as encog will complain otherwise.
   "
-  (assert (= 1 (count (filter #(= :input (:type %)))))
-          "Please give exactly one layer the type :input.")
-  (assert (= 1 (count (filter #(= :output (:type %)))))
-          "Please give exactly one layer the type :output."))
+
+  (let [inp (filter #(= :input (:type %)) layers)
+        outp (filter #(= :output (:type %)) layers)
+        hidden (filter f(= :hidden (:type %)) layers)]
+    (assert (= 1 (count inp)) "Please give exactly one layer the type :input.")
+    (assert (= 1 (count outp)) "Please give exactly one layer the type :output.")
+
+  ))

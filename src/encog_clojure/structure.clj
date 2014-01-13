@@ -4,14 +4,23 @@
             ActivationElliottSymmetric ActivationGaussian ActivationLinear
             ActivationLOG ActivationRamp ActivationSigmoid ActivationSIN
             ActivationSoftMax ActivationStep ActivationSteepenedSigmoid
-            ActivationTANH])
+            ActivationTANH]
+           [org.encog.neural.freeform FreeformLayer FreeformNetwork])
   (:use [clojure.string :only [lower-case]]))
+
+;; I have to assign ids to layers. Big hashes might be nicer, this will do.
+(def ^{:private true} counter (atom java.math.BigInteger/ONE))
+(defn- get-unique-id! []
+  "Gets a unique id from the counter, then increments it."
+  (let [res @counter]
+    (swap! counter inc)))
+
 
 
 ;;(contains? (map clojure.string/lower-case implemented) activation-function)
 ;;(get mappings activation-function activation-function)) type)
 
-(defrecord layer [neurons activation-function type])
+(defrecord layer [id neurons activation-function type])
 (defrecord connection [layer1 layer2 type bias recurrent?])
 
 (defn mklayer [n activation-function & {:keys [type] :or {type :hidden}}]
@@ -47,13 +56,13 @@
         activation-function (lower-case activation-function)
         implemented (set [:BiPolar :BipolarSteepenedSigmoid :ClippedLinear
                           :Elliott :ElliottSymmetric :Gaussian :Linear :LOG :SIN
-                          :Sigmoid :SoftMax :SteepenedSigmoid :Tanh])
+                          :Sigmoid :SoftMax :SteepenedSigmoid :TANH])
         matches (filter #(= activation-function (lower-case %)) implemented)
         mappings {:Bipolar :BiPolar, :Log :LOG, :Sin :SIN, :Softmax :SoftMax}]
 
     (if (not (empty? matches))
       ;;Great news, create the layer with a possibly renamed activation function
-      (layer. n (name-to-class (first matches)) type)
+      (layer. (get-unique-id!) n (name-to-class (first matches)) type)
       (throw (Exception. (str "Error, class " activation-function " not found"))))))
 
 
@@ -81,8 +90,30 @@
 
   (let [inp (filter #(= :input (:type %)) layers)
         outp (filter #(= :output (:type %)) layers)
-        hidden (filter f(= :hidden (:type %)) layers)]
+        hidden (filter f(= :hidden (:type %)) layers)
+        ]
     (assert (= 1 (count inp)) "Please give exactly one layer the type :input.")
     (assert (= 1 (count outp)) "Please give exactly one layer the type :output.")
+    (let [nn (FreeformNetwork.)
+          hm (loop [hm {} lrs layers]  ;; We do not know the id of the object we create
+               (if (empty? lrs)  ;;TODO: Maybe it can be done much more easily
+                 hm
+                 (let [l (first lrs)
+                       key (:id l)
+                       neurons (:neurons l)
+                       conn (condp = (:type l)
+                              :input (. nn (createInputLayer neurons))
+                              :hidden (. nn (createLayer neurons))
+                              :output (. nn (createOutputLayer neurons)))]
+                   (recur (assoc hm key conn) (rest lrs)))))]
+      ;; Create the connections
+      (doseq [conn connections]
+        (let [l1-object (hm (:id (:layer1 conn)))
+              l2-object (hm (:id (:layer2 conn)))
+              activ-fn (:activation-function conn)
+
+
+
+
 
   ))

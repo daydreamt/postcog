@@ -75,6 +75,7 @@
   bias: the bias unit for that connection.
   TODO: Ask encog why it is limited to one unit per source connection.
   recurrent?: whether the connection should be recurrent or not.
+  TODO: Encog ignores recurrent? What a mess.
   TODO: type is always :full for now, as it is not implemented in encog.
   "
   ;;TODO: Check types or something
@@ -90,8 +91,7 @@
 
   (let [inp (filter #(= :input (:type %)) layers)
         outp (filter #(= :output (:type %)) layers)
-        hidden (filter f(= :hidden (:type %)) layers)
-        ]
+        hidden (filter #(= :hidden (:type %)) layers)]
     (assert (= 1 (count inp)) "Please give exactly one layer the type :input.")
     (assert (= 1 (count outp)) "Please give exactly one layer the type :output.")
     (let [nn (FreeformNetwork.)
@@ -110,10 +110,10 @@
       (doseq [conn connections]
         (let [l1-object (hm (:id (:layer1 conn)))
               l2-object (hm (:id (:layer2 conn)))
-              activ-fn (:activation-function conn)
-
-
-
-
-
-  ))
+              activ-fn (:activation-function (:layer2 conn))
+              bias (:bias conn)
+              rec (:recurrent? conn)]
+          (. nn (connectLayers l1-object l2-object activ-fn bias rec))))
+      (. nn reset)
+      ;;Return the network
+      nn)))

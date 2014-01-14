@@ -16,10 +16,6 @@
     (swap! counter inc)))
 
 
-
-;;(contains? (map clojure.string/lower-case implemented) activation-function)
-;;(get mappings activation-function activation-function)) type)
-
 (defrecord layer [id neurons activation-function type])
 (defrecord connection [layer1 layer2 type bias recurrent?])
 
@@ -51,7 +47,8 @@
   "
 
   (let [name-to-class (fn [a]
-                        (eval `(new ~(symbol (str "Activation"
+                        (eval `(new ~(symbol (str "org.encog.engine.network"
+                                                  ".activation.Activation"
                                                   (apply str (rest (str a))))))))
         activation-function (lower-case activation-function)
         implemented (set [:BiPolar :BipolarSteepenedSigmoid :ClippedLinear

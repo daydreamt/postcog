@@ -1,4 +1,5 @@
 (ns encog-clojure.structure
+  ^{:doc "Creates the structs for creating networks manually."}
   (:import [org.encog.engine.network.activation ActivationBiPolar
             ActivationClippedLinear ActivationCompetitive ActivationElliott
             ActivationElliottSymmetric ActivationGaussian ActivationLinear
@@ -6,7 +7,25 @@
             ActivationSoftMax ActivationStep ActivationSteepenedSigmoid
             ActivationTANH]
            [org.encog.neural.freeform FreeformLayer FreeformNetwork])
+  (:import [org.encog.neural.networks BasicNetwork]
+           [org.encog.neural.networks.layers BasicLayer]
+           [org.encog.util.simple EncogUtility])
   (:use [clojure.string :only [lower-case]]))
+
+;; This means that to create a custom network you have to create a (defstruct),
+;; as well as a mknetwork function that returns it.
+;; Or create many different protocols for initialization of a network. Shite.
+;; (mknet [this params] "Make a net with optional parameters in a list. Has to be implemented.")
+
+(defprotocol Network
+  (predict [this inp] "Make a prediction for some data in core.matrix form."))
+
+(defprotocol Trainer
+  (train [this net & params] "Train a network with the parameters the trainer needs."))
+
+(defrecord layer [id neurons activ-fn type activ-fn-type])
+
+(defrecord connection [layer1 layer2 type bias recurrent?])
 
 ;; I have to assign ids to layers. Big hashes might be nicer, this will do.
 (def ^{:private true} counter (atom java.math.BigInteger/ONE))
@@ -16,10 +35,7 @@
     (swap! counter inc)))
 
 
-(defrecord layer [id neurons activation-function type])
-(defrecord connection [layer1 layer2 type bias recurrent?])
-
-(defn mklayer [n activation-function & {:keys [type] :or {type :hidden}}]
+(defn mklayer
   "
   This creates a layer record, to pass to mknet later. It's sugar to ensure the
   function exists, but to use a different one, you would probably have to subclass
@@ -45,12 +61,16 @@
   :SteepenedSigmoid
   :Tanh
   "
+  ([] (mklayer 1 :linear :type type))
+  ([n] (mklayer n :linear :type type))
+  ([n activation-function & {:keys [type] :or {type :hidden}}]
 
   (let [name-to-class (fn [a]
                         (eval `(new ~(symbol (str "org.encog.engine.network"
                                                   ".activation.Activation"
                                                   (apply str (rest (str a))))))))
         activation-function (lower-case activation-function)
+        activ-fn (keyword (apply str (rest activation-function)))
         implemented (set [:BiPolar :BipolarSteepenedSigmoid :ClippedLinear
                           :Elliott :ElliottSymmetric :Gaussian :Linear :LOG :SIN
                           :Sigmoid :SoftMax :SteepenedSigmoid :TANH])
@@ -59,8 +79,9 @@
 
     (if (not (empty? matches))
       ;;Great news, create the layer with a possibly renamed activation function
-      (layer. (get-unique-id!) n (name-to-class (first matches)) type)
-      (throw (Exception. (str "Error, class " activation-function " not found"))))))
+      (layer. (get-unique-id!) n (name-to-class (first matches)) type activ-fn)
+      (throw (Exception. (str "Error, class " activation-function " not found")))))))
+
 
 
 (defn mkconnection [source target & {:keys [bias recurrent?] :or
@@ -78,12 +99,28 @@
   ;;TODO: Check types or something
   (connection. source target type bias recurrent?))
 
+(defn make-feed-forward [layers]
+  (assert (= :linear (:activ-fn-type (first layers))) "Encog only support linear first layers")
+  (let [nn (BasicNetwork.)
+        fl (first layers)]
+    ;; Stupid encog treats first layer differently
+    (.addLayer nn (BasicLayer. nil true (:neurons fl)))
+    (doseq [l (rest layers)]
+      ;;I am sorry for adding a bias everywhere. I blame encog.
+      (.addLayer nn (BasicLayer. (:activ-fn l) true (:neurons l))))
+    (.finalizeStructure (.getStructure nn))
+    (.reset nn)
+    nn
+    ))
 
-(defn mknet [layers connections]
+
+(defn mknet-custom [layers connections]
   "
   Given seqs of layers and connections, creates a network.
   Please make sure at least one of the layer has type input,
   and at least one has type output, as encog will complain otherwise.
+
+  Also automatically adds bias units, because Encog.
   "
 
   (let [inp (filter #(= :input (:type %)) layers)
@@ -107,7 +144,7 @@
       (doseq [conn connections]
         (let [l1-object (hm (:id (:layer1 conn)))
               l2-object (hm (:id (:layer2 conn)))
-              activ-fn (:activation-function (:layer2 conn))
+              activ-fn (:activ-fn (:layer2 conn))
               bias (:bias conn)
               rec (:recurrent? conn)]
           (. nn (connectLayers l1-object l2-object activ-fn bias rec))))
